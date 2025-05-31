@@ -2,11 +2,11 @@ use tch::{nn, Tensor, Device, Kind, TchError};
 use anyhow::Result;
 use std::path::Path;
 use tch::nn::OptimizerConfig;
-use crate::InSPyReNet;
+use crate::Ocelot;
 
 /// Training utilities
 pub struct Trainer {
-    pub model: InSPyReNet,
+    pub model: Ocelot,
     pub optimizer: nn::Optimizer,
     pub device: Device,
     pub config: TrainingConfig,
@@ -36,7 +36,7 @@ impl Default for TrainingConfig {
 }
 
 impl Trainer {
-    pub fn new(model: crate::InSPyReNet, config: TrainingConfig) -> Result<Self> {
+    pub fn new(model: crate::Ocelot, config: TrainingConfig) -> Result<Self> {
         let vs = nn::VarStore::new(model.config.device);
         let optimizer = nn::Adam::default().build(&vs, config.learning_rate)?;
         let device = model.config.device;

@@ -28,6 +28,11 @@ impl Ocelot {
             config,
         })
     }
+    
+    #[inline]
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
 
     /// Forward pass for multi-scale prediction
     pub fn forward_ms(&self, x: &Tensor, scales: &[f64], train: bool) -> Result<Vec<Tensor>> {

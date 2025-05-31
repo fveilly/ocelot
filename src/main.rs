@@ -1,8 +1,8 @@
 // main.rs - Example usage of the InSPyReNet Rust implementation
 
 use anyhow::Result;
-use tch::{Device, Tensor, Kind};
-use ocelot::{Ocelot, Config, Trainer, SaliencyMetrics, ImageProcessor};
+use tch::{Device, Tensor, Kind, nn};
+use ocelot::{Ocelot, Config, SaliencyMetrics, ImageProcessor};
 
 fn main() -> Result<()> {
     // Initialize configuration
@@ -10,15 +10,13 @@ fn main() -> Result<()> {
 
     // Create model
     let device = Device::cuda_if_available();
-    let model = Ocelot::new(config.model.clone())?;
+    let vs = nn::VarStore::new(device);
+    let model = Ocelot::new(&vs.root(), config)?;
 
     println!("Model created successfully on device: {:?}", device);
 
     // Example 1: Inference on a single image
     inference_example(&model)?;
-
-    // Example 2: Training loop
-    training_example(model, config)?;
 
     Ok(())
 }
@@ -27,13 +25,13 @@ fn inference_example(model: &Ocelot) -> Result<()> {
     println!("Running inference example...");
 
     // Create dummy input (batch_size=1, channels=3, height=352, width=352)
-    let input = Tensor::randn(&[1, 3, 352, 352], (Kind::Float, model.config.device));
+    let input = Tensor::randn(&[1, 3, 352, 352], (Kind::Float, model.config().device));
 
     // Normalize input
     let normalized_input = ImageProcessor::normalize(&input);
 
     // Forward pass
-    let output = model.forward(&normalized_input)?;
+    let output = model.forward_t(&normalized_input, false)?;
 
     // The output should be a saliency map
     println!("Input shape: {:?}", input.size());
@@ -42,41 +40,11 @@ fn inference_example(model: &Ocelot) -> Result<()> {
     // Apply sigmoid to get probability map
     let saliency_map = output.sigmoid();
     println!("Saliency map range: [{:.4}, {:.4}]",
-             f64::from(saliency_map.min()),
-             f64::from(saliency_map.max()));
+             f64::try_from(saliency_map.min())?,
+             f64::try_from(saliency_map.max())?);
 
     Ok(())
 }
-
-fn training_example(model: InSPyReNet, config: Config) -> Result<()> {
-    println!("Running training example...");
-
-    // Create trainer
-    let mut trainer = Trainer::new(model, config.training)?;
-
-    // Create dummy training data
-    let train_data = create_dummy_dataloader(config.data.image_size, 100)?; // 100 samples
-    let val_data = create_dummy_dataloader(config.data.image_size, 20)?;   // 20 samples
-
-    // Start training
-    trainer.train(train_data, Some(val_data))?;
-
-    Ok(())
-}
-
-fn create_dummy_dataloader(image_size: i64, num_samples: usize) -> Result<impl Iterator<Item = (Tensor, Tensor)> + Clone> {
-    let samples: Vec<(Tensor, Tensor)> = (0..num_samples)
-        .map(|_| {
-            let image = Tensor::randn(&[1, 3, image_size, image_size], (Kind::Float, Device::cuda_if_available()));
-            let mask = Tensor::rand(&[1, 1, image_size, image_size], (Kind::Float, Device::cuda_if_available()));
-            (image, mask)
-        })
-        .collect();
-
-    Ok(samples.into_iter())
-}
-
-// Additional usage examples
 
 fn pyramid_processing_example() -> Result<()> {
     println!("Running pyramid processing example...");
@@ -119,10 +87,10 @@ fn evaluation_example() -> Result<()> {
     let ground_truth = Tensor::rand(&[1, 1, 352, 352], (Kind::Float, device)).gt(0.5).to_kind(Kind::Float);
 
     // Calculate metrics
-    let mae = SaliencyMetrics::mae(&prediction, &ground_truth);
-    let f_measure = SaliencyMetrics::f_measure(&prediction, &ground_truth, 0.5);
-    let s_measure = SaliencyMetrics::s_measure(&prediction, &ground_truth);
-    let e_measure = SaliencyMetrics::e_measure(&prediction, &ground_truth);
+    let mae = SaliencyMetrics::mae(&prediction, &ground_truth).unwrap_or(0f64);
+    let f_measure = SaliencyMetrics::f_measure(&prediction, &ground_truth, 0.5).unwrap_or(0f64);
+    let s_measure = SaliencyMetrics::s_measure(&prediction, &ground_truth).unwrap_or(0f64);
+    let e_measure = SaliencyMetrics::e_measure(&prediction, &ground_truth).unwrap_or(0f64);
 
     println!("Evaluation Metrics:");
     println!("MAE: {:.4}", mae);
@@ -139,12 +107,14 @@ mod tests {
 
     #[test]
     fn test_model_creation() -> Result<()> {
+        let device = Device::cuda_if_available();
         let config = Config::default();
-        let model = InSPyReNet::new(config.model)?;
+        let vs = nn::VarStore::new(device);
+        let model = Ocelot::new(&vs.root(), config)?;
 
         // Test forward pass
         let input = Tensor::randn(&[1, 3, 352, 352], (Kind::Float, Device::Cpu));
-        let output = model.forward(&input)?;
+        let output = model.forward_t(&input, true)?;
 
         assert_eq!(output.size(), vec![1, 1, 352, 352]);
         Ok(())

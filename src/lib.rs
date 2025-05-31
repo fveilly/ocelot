@@ -5,10 +5,12 @@ pub mod model;
 pub mod backbone;
 pub mod decoder;
 pub mod utils;
+pub mod dataloader;
 
 pub use model::Ocelot;
 pub use backbone::{Res2Net, SwinTransformer};
 pub use decoder::{SimpleDecoder, PyramidDecoder};
+pub use utils::{Trainer, ImageProcessor, SaliencyMetrics};
 
 /// Configuration for InSPyReNet model
 #[derive(Debug, Clone)]
